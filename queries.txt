@@ -1,0 +1,137 @@
+#Task 1
+create schema pandemic collate utf8_general_ci;
+
+use pandemic;
+
+#Task 2
+
+#normalisation variant №1 begin #
+
+create table pandemic.regions
+(
+    id   int auto_increment primary key,
+    name varchar(255) not null,
+    code varchar(3)   null
+);
+
+create table pandemic.diseases
+(
+    id   int auto_increment primary key,
+    name varchar(255) not null
+);
+
+create table pandemic.cases
+(
+    region_id  int  not null,
+    disease_id int  not null,
+    year       year not null,
+    count      int  null,
+    primary key (region_id, disease_id, year),
+    constraint disease_fk
+        foreign key (disease_id) references pandemic.diseases (id),
+    constraint regions_fk
+        foreign key (region_id) references pandemic.regions (id)
+);
+
+#normalisation variant №1 end #
+
+#normalisation variant №2 begin #
+
+create table pandemic.regions
+(
+    id   int auto_increment primary key,
+    name varchar(255) not null,
+    code varchar(3)   null
+);
+
+create table pandemic.infectious_cases_normalized
+(
+    region_id            int          not null,
+    Year                 year         not null,
+    Number_yaws          int          null,
+    polio_cases          int          null,
+    cases_guinea_worm    int          null,
+    Number_rabies        double       null,
+    Number_malaria       double       null,
+    Number_hiv           double       null,
+    Number_tuberculosis  double       null,
+    Number_smallpox      double       null,
+    Number_cholera_cases double       null,
+    primary key (region_id, Year),
+    constraint region_fk foreign key (region_id) references pandemic.regions (id)
+);
+
+#normalisation variant №2 end #
+
+create unique index r_name_idx
+    on regions (name);
+
+INSERT INTO regions (name, code)
+SELECT DISTINCT Entity, Code
+FROM infectious_cases;
+
+INSERT INTO infectious_cases_normalized
+    (region_id, Year, Number_yaws, polio_cases, cases_guinea_worm, Number_rabies, Number_malaria, Number_hiv, Number_tuberculosis, Number_smallpox, Number_cholera_cases)
+SELECT (SELECT id FROM regions WHERE name = Entity), Year, Number_yaws, polio_cases, cases_guinea_worm, Number_rabies, Number_malaria, Number_hiv, Number_tuberculosis, Number_smallpox, Number_cholera_cases
+FROM infectious_cases;
+
+#Task 3
+SELECT
+    AVG(Number_rabies) as avg,
+    MIN(Number_rabies) as min,
+    MAX(Number_rabies) as max,
+    SUM(Number_rabies) as sum
+FROM infectious_cases_normalized
+WHERE Number_rabies is not null # because empty lines were imported as null
+GROUP BY region_id;
+
+SELECT
+    AVG(Number_rabies) as avg,
+    MIN(Number_rabies) as min,
+    MAX(Number_rabies) as max,
+    SUM(Number_rabies) as sum
+FROM infectious_cases_normalized
+WHERE Number_rabies is not null # because empty lines were imported as null
+GROUP BY region_id
+ORDER BY avg DESC;
+
+SELECT
+    AVG(Number_rabies) as avg,
+    MIN(Number_rabies) as min,
+    MAX(Number_rabies) as max,
+    SUM(Number_rabies) as sum
+FROM infectious_cases_normalized
+WHERE Number_rabies is not null # because empty lines were imported as null
+GROUP BY region_id
+ORDER BY avg DESC
+LIMIT 10;
+
+
+#Task 4
+
+ALTER TABLE infectious_cases_normalized
+    ADD COLUMN date DATE as (MAKEDATE(Year,1)) AFTER Year,
+    ADD COLUMN curr_date DATE as (CURRENT_DATE()) AFTER date,
+    ADD COLUMN years_diff INT as (TIMESTAMPDIFF(YEAR,date,curr_date)) AFTER curr_date;
+
+SELECT Year,date, curr_date, years_diff FROM infectious_cases_normalized;
+
+#Task 5
+
+DROP FUNCTION IF EXISTS years_between;
+DELIMITER //
+CREATE FUNCTION years_between(year YEAR)
+RETURNS INT
+DETERMINISTIC
+NO SQL
+BEGIN
+    RETURN TIMESTAMPDIFF(YEAR,MAKEDATE(year,1),CURRENT_DATE());
+END //
+DELIMITER ;
+
+SELECT Year,
+       date,
+       curr_date,
+       years_between(Year) as years_diff_fn
+FROM infectious_cases_normalized
+
